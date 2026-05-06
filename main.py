@@ -1,5 +1,5 @@
 """
-main.py - Hunter Assassin Stealth Game
+main.py - Nocturne Void Stealth Game
 """
 
 import pygame
@@ -11,6 +11,7 @@ from settings import (
     SCREEN_WIDTH, SCREEN_HEIGHT, FPS, TITLE,
     STATE_MENU, STATE_MAP_SELECT, STATE_PLAYING,
     STATE_GAME_OVER, STATE_LEVEL_CLEAR, STATE_WIN,
+    STATE_LAUNCHING, STATE_QUIT_CONFIRM,
     BLACK, MAP_PACKS
 )
 from player import Player
@@ -23,7 +24,10 @@ from sound_manager import SoundManager
 class Game:
     def __init__(self):
         pygame.init()
-        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        self.screen = pygame.display.set_mode(
+            (SCREEN_WIDTH, SCREEN_HEIGHT),
+            pygame.FULLSCREEN | pygame.SCALED
+        )
         pygame.display.set_caption(TITLE)
         self.clock = pygame.time.Clock()
         self.sound = SoundManager()
@@ -45,6 +49,16 @@ class Game:
         self.elapsed_time = 0
         self.total_time = 0
 
+        # Bot movement sound timer
+        self._bot_move_timer = 0
+
+        # Launching screen timer
+        self._launch_start = 0
+        self._launch_duration = 4.0  # seconds
+
+        # Start lobby music immediately
+        self.sound.start_menu_music()
+
     def _init_level(self, level_idx):
         level_data = self.active_levels[level_idx]
         self.game_map = GameMap(level_data, theme=self.active_theme)
@@ -64,15 +78,20 @@ class Game:
         self.elapsed_time = 0
 
     def _start_game(self):
-        """Start a game with the selected map pack."""
+        """Start a game with the selected map pack — show launching screen first."""
         pack = MAP_PACKS[self.selected_pack]
         self.active_pack = pack
         self.active_levels = pack["levels"]
         self.active_theme = pack["theme"]
         self.current_level = 0
         self.total_time = 0
-        self.state = STATE_PLAYING
-        self._init_level(0)
+        # Transition to launching screen (4-sec cinematic intro)
+        self.state = STATE_LAUNCHING
+        self._launch_start = time.time()
+        self.ui.anim_timer = 0
+        # Stop lobby music, start nether portal SFX
+        self.sound.stop_menu_music()
+        self.sound.play_launch_sfx()
 
     def run(self):
         while self.running:
@@ -91,10 +110,22 @@ class Game:
                 self._handle_keydown(event.key)
 
     def _handle_keydown(self, key):
+        # --- Quit Confirm ---
+        if self.state == STATE_QUIT_CONFIRM:
+            if key == pygame.K_ESCAPE:
+                self.running = False  # red button — actually quit
+            elif key == pygame.K_RETURN:
+                # green button — just kidding, back to lobby
+                self.state = STATE_MENU
+                self.ui.anim_timer = 0
+                self.sound.start_menu_music()
+            return
+
         # --- Menu ---
         if self.state == STATE_MENU:
             if key == pygame.K_ESCAPE:
-                self.running = False
+                self.state = STATE_QUIT_CONFIRM
+                self.ui.anim_timer = 0
             elif key == pygame.K_RETURN:
                 self.state = STATE_MAP_SELECT
                 self.ui.anim_timer = 0
@@ -113,9 +144,11 @@ class Game:
                 self._start_game()
             return
 
-        # --- Global escape ---
+        # --- Leave: ESC returns to map select ---
         if key == pygame.K_ESCAPE:
-            self.running = False
+            self.state = STATE_MAP_SELECT
+            self.ui.anim_timer = 0
+            self.sound.start_menu_music()
             return
 
         # --- Game Over: retry same level ---
@@ -139,17 +172,49 @@ class Game:
         if self.state == STATE_WIN and key == pygame.K_r:
             self.state = STATE_MAP_SELECT
             self.ui.anim_timer = 0
+            # Resume lobby music
+            self.sound.start_menu_music()
             return
 
     def _update(self):
         self.ui.update()
+        # Tick sound cooldowns every frame
+        self.sound.tick_cooldowns()
+
+        # Ensure lobby music plays on non-gameplay screens
+        if self.state in (STATE_MENU, STATE_MAP_SELECT, STATE_WIN):
+            if not self.sound.is_music_playing:
+                self.sound.start_menu_music()
+        elif self.state == STATE_GAME_OVER or self.state == STATE_LEVEL_CLEAR:
+            # Keep music off during game over / level clear
+            pass
+
+        # Launching screen countdown
+        if self.state == STATE_LAUNCHING:
+            elapsed = time.time() - self._launch_start
+            if elapsed >= self._launch_duration:
+                # Launch complete — start gameplay
+                self.sound.stop_launch_sfx()
+                self.state = STATE_PLAYING
+                self._init_level(0)
+            return
+
         if self.state != STATE_PLAYING:
             return
+
         self.elapsed_time = time.time() - self.start_time
         keys = pygame.key.get_pressed()
         dx, dy = self.player.handle_input(keys)
-        self.player.move(dx, dy, self.game_map.walls)
+
+
+        # Move player (wall collision is silent)
+        hit_wall = self.player.move(dx, dy, self.game_map.walls)
+
         self.player.update()
+
+        # Bot movement sound timer
+        self._bot_move_timer += 1
+
         alive_guards = [g for g in self.guards if g.alive]
         for guard in alive_guards:
             guard.update(self.game_map.walls)
@@ -164,7 +229,8 @@ class Game:
                     kill_x, kill_y = guard.x, guard.y
                     guard.alive = False
                     self.player.kills += 1
-                    self.sound.play("pickup")
+                    # Play kill sound
+                    self.sound.play_kill()
                     # Alert nearest alive guard to investigate
                     self._alert_nearest_guard(kill_x, kill_y)
                 else:
@@ -173,6 +239,13 @@ class Game:
                     self.ui.anim_timer = 0
                     self.sound.play("lose")
                     return
+
+        # Periodic bot movement sounds (don't spam every frame)
+        if self._bot_move_timer >= 40:
+            if alive_guards:
+                self.sound.play("bot_move")
+            self._bot_move_timer = 0
+
         if all(not g.alive for g in self.guards):
             self.total_time += self.elapsed_time
             self.state = STATE_LEVEL_CLEAR
@@ -181,10 +254,15 @@ class Game:
 
     def _draw(self):
         self.screen.fill(BLACK)
-        if self.state == STATE_MENU:
+        if self.state == STATE_QUIT_CONFIRM:
+            self.ui.draw_quit_confirm(self.screen)
+        elif self.state == STATE_MENU:
             self.ui.draw_menu(self.screen)
         elif self.state == STATE_MAP_SELECT:
             self.ui.draw_map_select(self.screen, self.selected_pack)
+        elif self.state == STATE_LAUNCHING:
+            progress = min(1.0, (time.time() - self._launch_start) / self._launch_duration)
+            self.ui.draw_launching(self.screen, self.active_pack, progress)
         elif self.state == STATE_PLAYING:
             self._draw_gameplay()
         elif self.state == STATE_GAME_OVER:

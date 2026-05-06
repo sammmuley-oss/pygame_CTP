@@ -49,7 +49,9 @@ class Player:
 
     def move(self, dx, dy, walls):
         if not self.alive:
-            return
+            return False
+
+        hit_wall = False
 
         self.x += dx
         pr = self.get_rect()
@@ -57,6 +59,7 @@ class Player:
             if pr.colliderect(w):
                 if dx > 0: self.x = w.left - self.size // 2
                 elif dx < 0: self.x = w.right + self.size // 2
+                hit_wall = True
 
         self.y += dy
         pr = self.get_rect()
@@ -64,10 +67,13 @@ class Player:
             if pr.colliderect(w):
                 if dy > 0: self.y = w.top - self.size // 2
                 elif dy < 0: self.y = w.bottom + self.size // 2
+                hit_wall = True
 
         half = self.size // 2
         self.x = max(half, min(SCREEN_WIDTH - half, self.x))
         self.y = max(half, min(SCREEN_HEIGHT - half, self.y))
+
+        return hit_wall
 
     def update(self):
         self.pulse_timer += 1
@@ -80,6 +86,8 @@ class Player:
             self._draw_space(surface)
         elif self.theme_style == "jungle":
             self._draw_jungle(surface)
+        elif self.theme_style == "lava":
+            self._draw_lava(surface)
         else:
             self._draw_space(surface)
 
@@ -283,3 +291,116 @@ class Player:
             pupil_x = eye_x + int(ca * 1)
             pupil_y = eye_y + int(sa * 1)
             pygame.draw.circle(surface, (15, 15, 25), (pupil_x, pupil_y), 1)
+
+    # ================================================================
+    #  LAVA / NETHER PLAYER — Molten flame warrior (bright, distinct)
+    # ================================================================
+    def _draw_lava(self, surface):
+        half = self.size // 2
+        px, py = int(self.x), int(self.y)
+        ca = math.cos(self.facing_angle)
+        sa = math.sin(self.facing_angle)
+        perp_x, perp_y = -sa, ca
+
+        # Flame aura glow behind the player
+        aura_pulse = math.sin(self.pulse_timer * 0.1) * 3
+        aura_size = int(self.size + 10 + aura_pulse)
+        aura = pygame.Surface((aura_size * 2, aura_size * 2), pygame.SRCALPHA)
+        pygame.draw.circle(aura, (255, 120, 20, 18), (aura_size, aura_size), aura_size)
+        pygame.draw.circle(aura, (255, 180, 40, 12), (aura_size, aura_size), aura_size - 5)
+        surface.blit(aura, (px - aura_size, py - aura_size))
+
+        # Shadow
+        s = pygame.Surface((self.size + 4, self.size + 4), pygame.SRCALPHA)
+        pygame.draw.rect(s, (0, 0, 0, 50), (0, 0, self.size + 4, self.size + 4), border_radius=6)
+        surface.blit(s, (px - half + 1, py - half + 3))
+
+        # --- Fire blade (golden bright) ---
+        blade_ox = px + int(perp_x * 4)
+        blade_oy = py + int(perp_y * 4)
+
+        # Golden handle
+        h_sx = blade_ox - int(ca * 5)
+        h_sy = blade_oy - int(sa * 5)
+        h_ex = blade_ox + int(ca * 4)
+        h_ey = blade_oy + int(sa * 4)
+        pygame.draw.line(surface, (140, 100, 30), (h_sx, h_sy), (h_ex, h_ey), 5)
+        pygame.draw.line(surface, (200, 160, 50), (h_sx, h_sy), (h_ex, h_ey), 3)
+
+        # Crossguard (bright gold)
+        g_len = 4
+        gx1 = h_ex + int(perp_x * g_len)
+        gy1 = h_ey + int(perp_y * g_len)
+        gx2 = h_ex - int(perp_x * g_len)
+        gy2 = h_ey - int(perp_y * g_len)
+        pygame.draw.line(surface, (255, 220, 80), (gx1, gy1), (gx2, gy2), 3)
+
+        # Fire blade (bright yellow-white)
+        blade_len = half + 12
+        tip_x = blade_ox + int(ca * blade_len)
+        tip_y = blade_oy + int(sa * blade_len)
+        # Glow
+        glow = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        pygame.draw.line(glow, (255, 200, 50, 35), (h_ex, h_ey), (tip_x, tip_y), 9)
+        surface.blit(glow, (0, 0))
+        # Core blade
+        pulse = math.sin(self.pulse_timer * 0.15) * 20
+        blade_col = (255, int(min(255, 220 + pulse)), int(max(50, 80 + pulse)))
+        pygame.draw.line(surface, blade_col, (h_ex, h_ey), (tip_x, tip_y), 3)
+        pygame.draw.line(surface, (255, 255, 200), (h_ex, h_ey), (tip_x, tip_y), 1)
+        pygame.draw.circle(surface, (255, 255, 200), (tip_x, tip_y), 2)
+
+        # --- Body: bright molten orange armor ---
+        pulse_v = math.sin(self.pulse_timer * 0.08) * 10
+        body_r = int(max(0, min(255, 210 + pulse_v)))
+        body_g = int(max(0, min(255, 110 + pulse_v * 0.6)))
+        body_b = 25
+        body_col = (body_r, body_g, body_b)
+        body_out = (170, 75, 15)
+
+        body = pygame.Rect(px - half, py - half, self.size, self.size)
+        pygame.draw.rect(surface, body_col, body, border_radius=6)
+        pygame.draw.rect(surface, body_out, body, width=2, border_radius=6)
+
+        # Bright flame vein lines on suit
+        vein_col = (255, 200, 60, 80)
+        cs = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
+        pygame.draw.line(cs, vein_col, (half, 3), (half, self.size - 3), 1)
+        pygame.draw.line(cs, vein_col, (3, half), (self.size - 3, half), 1)
+        # Bright ember nodes
+        for cx_off, cy_off in [(half-5, half-5), (half+5, half+5),
+                                (half-5, half+5), (half+5, half-5)]:
+            pygame.draw.circle(cs, (255, 230, 80, 120), (cx_off, cy_off), 2)
+        surface.blit(cs, (px - half, py - half))
+
+        # --- Head: flame crown ---
+        head_x = px + int(ca * 2)
+        head_y = py + int(sa * 2)
+
+        # Bright amber face
+        skin_col = (230, 170, 80)
+        pygame.draw.circle(surface, skin_col, (head_x, head_y), 8)
+        pygame.draw.circle(surface, (180, 120, 50), (head_x, head_y), 8, 1)
+
+        # Flame crown spikes (3 small triangles on top)
+        crown_base_y = head_y - 6
+        for offset in (-4, 0, 4):
+            spike_x = head_x + offset
+            tip_spike_y = crown_base_y - 5 - abs(offset) // 2
+            # Flame color
+            f_pulse = int(math.sin(self.pulse_timer * 0.15 + offset) * 20)
+            flame_col = (255, min(255, 180 + f_pulse), max(0, 30 + f_pulse))
+            pts = [(spike_x - 2, crown_base_y), (spike_x + 2, crown_base_y),
+                   (spike_x, tip_spike_y)]
+            pygame.draw.polygon(surface, flame_col, pts)
+
+        # Glowing yellow eyes
+        eye_off = 3
+        ex = int(ca * eye_off)
+        ey = int(sa * eye_off)
+        for side in (-3, 3):
+            eye_x = head_x + int(perp_x * side) + ex
+            eye_y = head_y + int(perp_y * side) + ey
+            pygame.draw.circle(surface, (255, 240, 100), (eye_x, eye_y), 2)
+            pygame.draw.circle(surface, (255, 180, 30), (eye_x, eye_y), 1)
+

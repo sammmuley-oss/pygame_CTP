@@ -1,5 +1,5 @@
 """
-map_manager.py - Map Layout & Rendering (Space + Jungle themes)
+map_manager.py - Map Layout & Rendering (Space + Jungle + Lava themes)
 """
 
 import pygame
@@ -48,6 +48,8 @@ class GameMap:
 
         if self.style == "jungle":
             self._build_jungle(w, h)
+        elif self.style == "lava":
+            self._build_lava(w, h)
         else:
             self._build_space(w, h)
 
@@ -487,3 +489,130 @@ class GameMap:
     def draw(self, surface):
         surface.blit(self.floor_surface, (0, 0))
         surface.blit(self.wall_surface, (0, 0))
+
+    # ================================================================
+    #  LAVA / NETHER THEME
+    # ================================================================
+    def _build_lava(self, w, h):
+        """Volcanic nether floor with magma cracks and magma block walls."""
+        # --- Ground: dark basalt with magma veins ---
+        for r in range(GRID_ROWS):
+            for c in range(GRID_COLS):
+                rv = random.randint(-4, 4)
+                if (r+c) % 2 == 0:
+                    base = tuple(max(0, min(255, x+rv)) for x in self.floor1)
+                else:
+                    base = tuple(max(0, min(255, x+rv)) for x in self.floor2)
+                px, py = c*TILE_SIZE, r*TILE_SIZE
+                pygame.draw.rect(self.floor_surface, base, (px, py, TILE_SIZE, TILE_SIZE))
+
+                tile = self.layout[r][c] if r < len(self.layout) and c < len(self.layout[0]) else 1
+                if tile != TILE_WALL:
+                    # Magma vein cracks on floor
+                    if random.random() < 0.18:
+                        vx = px + random.randint(4, TILE_SIZE-4)
+                        vy = py + random.randint(4, TILE_SIZE-4)
+                        vein_col = random.choice([
+                            (160, 50, 10), (180, 70, 15), (140, 40, 8),
+                            (200, 80, 20), (170, 60, 12),
+                        ])
+                        vl = random.randint(4, 10)
+                        angle = random.uniform(-0.8, 0.8)
+                        import math as _m
+                        ex = vx + int(vl * _m.cos(angle))
+                        ey = vy + int(vl * _m.sin(angle))
+                        pygame.draw.line(self.floor_surface, vein_col,
+                                         (vx, vy), (ex, ey), 1)
+
+                    # Ember spark dots
+                    if random.random() < 0.06:
+                        ex = px + random.randint(3, TILE_SIZE-3)
+                        ey = py + random.randint(3, TILE_SIZE-3)
+                        pygame.draw.circle(self.floor_surface,
+                                           random.choice([(255,140,30),(255,180,50),(220,100,20)]),
+                                           (ex, ey), 1)
+
+                    # Subtle basalt texture cracks
+                    if random.random() < 0.10:
+                        cx = px + random.randint(5, TILE_SIZE-5)
+                        cy = py + random.randint(5, TILE_SIZE-5)
+                        pygame.draw.circle(self.floor_surface,
+                                           (25, 14, 10), (cx, cy), random.randint(1, 3))
+
+        # Subtle floor grid overlay (basalt tile lines)
+        grid_surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        for r in range(GRID_ROWS):
+            for c in range(GRID_COLS):
+                tile = self.layout[r][c] if r < len(self.layout) and c < len(self.layout[0]) else 1
+                if tile != TILE_WALL:
+                    px, py = c * TILE_SIZE, r * TILE_SIZE
+                    pygame.draw.rect(grid_surf, (60, 30, 15, 18),
+                                     (px, py, TILE_SIZE, TILE_SIZE), 1)
+        self.floor_surface.blit(grid_surf, (0, 0))
+
+        # --- Walls: magma blocks ---
+        for wr in self.walls:
+            c = wr.left // TILE_SIZE
+            r = wr.top // TILE_SIZE
+            is_border = (r == 0 or r == GRID_ROWS-1 or c == 0 or c == GRID_COLS-1)
+            cx = wr.left + TILE_SIZE // 2
+            cy = wr.top + TILE_SIZE // 2
+
+            if is_border:
+                self._draw_lava_border(wr, cx, cy)
+            else:
+                self._draw_magma_block(wr, cx, cy)
+
+    def _draw_lava_border(self, wr, cx, cy):
+        """Obsidian border plating with subtle magma glow."""
+        # Dark basalt base
+        pygame.draw.rect(self.wall_surface, (50, 28, 18), wr)
+        # Edges
+        pygame.draw.rect(self.wall_surface, (70, 40, 25), wr, 2)
+        # Inner shadow
+        inner = wr.inflate(-4, -4)
+        pygame.draw.rect(self.wall_surface, (35, 18, 12), inner, 1)
+        # Rivet-like magma dots at corners
+        for corner in [(wr.left+5, wr.top+5), (wr.right-6, wr.top+5),
+                        (wr.left+5, wr.bottom-6), (wr.right-6, wr.bottom-6)]:
+            pygame.draw.circle(self.wall_surface, (180, 70, 20), corner, 2)
+            pygame.draw.circle(self.wall_surface, (120, 45, 15), corner, 1)
+
+    def _draw_magma_block(self, wr, cx, cy):
+        """Lava block — bright molten flowing lava surface."""
+        ts = TILE_SIZE
+
+        # Bright orange lava base
+        pygame.draw.rect(self.wall_surface, (220, 110, 15), wr)
+
+        # Pixelated lava texture — mix of hot (yellow) and cool (deep orange) patches
+        chunk = 5
+        for py in range(0, ts, chunk):
+            for px in range(0, ts, chunk):
+                roll = random.random()
+                if roll < 0.30:
+                    # Hot bright yellow-orange
+                    c = random.choice([
+                        (255, 200, 50), (255, 180, 40), (255, 220, 70),
+                        (250, 190, 45), (255, 210, 60),
+                    ])
+                elif roll < 0.65:
+                    # Mid orange (main lava body)
+                    c = random.choice([
+                        (230, 120, 20), (240, 130, 25), (220, 110, 18),
+                        (235, 125, 22), (225, 115, 20),
+                    ])
+                else:
+                    # Darker orange (cooler lava spots)
+                    c = random.choice([
+                        (190, 80, 10), (200, 90, 15), (180, 75, 8),
+                        (195, 85, 12), (185, 78, 10),
+                    ])
+                cw = min(chunk, ts - px)
+                ch = min(chunk, ts - py)
+                pygame.draw.rect(self.wall_surface,  c,
+                                 (wr.left + px, wr.top + py, cw, ch))
+
+        # Thin darker edge
+        pygame.draw.rect(self.wall_surface, (160, 60, 5), wr, 1)
+

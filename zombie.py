@@ -316,6 +316,9 @@ class Guard:
             if self.theme_style == "jungle":
                 color = (255, 100, 100, 35) if self.detected else (200, 255, 100, 22)
                 edge_col = (255, 80, 80, 80) if self.detected else (150, 200, 50, 50)
+            elif self.theme_style == "lava":
+                color = (255, 80, 80, 40) if self.detected else (255, 160, 40, 22)
+                edge_col = (255, 60, 60, 90) if self.detected else (255, 120, 30, 55)
             elif self.theme_style == "space":
                 color = (255, 80, 80, 40) if self.detected else (80, 180, 255, 25)
                 edge_col = (255, 60, 60, 90) if self.detected else (60, 150, 255, 60)
@@ -336,6 +339,8 @@ class Guard:
             self._draw_space(surface)
         elif self.theme_style == "jungle":
             self._draw_jungle(surface)
+        elif self.theme_style == "lava":
+            self._draw_lava(surface)
         else:
             self._draw_space(surface)
 
@@ -557,3 +562,102 @@ class Guard:
                 p2x = head_x - int(perp_x * 6) + int(ca * offset)
                 p2y = head_y - int(perp_y * 6) + int(sa * offset)
                 pygame.draw.line(surface, (35, 50, 25), (p1x, p1y), (p2x, p2y), 1)
+
+    # ================================================================
+    #  LAVA / NETHER GUARD — Magma sentinel with lava cannon
+    # ================================================================
+    def _draw_lava(self, surface):
+        half = self.size // 2
+        gx, gy = int(self.x), int(self.y)
+        ca, sa = math.cos(self.angle), math.sin(self.angle)
+        perp_x, perp_y = -sa, ca
+
+        # Shadow
+        s = pygame.Surface((self.size + 6, self.size + 6), pygame.SRCALPHA)
+        pygame.draw.rect(s, (0, 0, 0, 50), (0, 0, self.size + 6, self.size + 6), border_radius=4)
+        surface.blit(s, (gx - half - 1, gy - half + 2))
+
+        # --- Lava cannon ---
+        if self.detected:
+            barrel_col = (255, 80, 40)
+            barrel_glow = (255, 120, 60)
+            muzzle_col = (255, 50, 20)
+        else:
+            barrel_col = (180, 90, 30)
+            barrel_glow = (220, 130, 50)
+            muzzle_col = (255, 140, 40)
+
+        gun_ox = gx + int(perp_x * 5)
+        gun_oy = gy + int(perp_y * 5)
+
+        # Barrel
+        barrel_len = half + 14
+        bex = gun_ox + int(ca * barrel_len)
+        bey = gun_oy + int(sa * barrel_len)
+        bsx = gun_ox + int(ca * 2)
+        bsy = gun_oy + int(sa * 2)
+        pygame.draw.line(surface, (50, 30, 20), (bsx, bsy), (bex, bey), 5)
+        pygame.draw.line(surface, barrel_col, (bsx, bsy), (bex, bey), 2)
+
+        # Muzzle glow
+        glow = pygame.Surface((10, 10), pygame.SRCALPHA)
+        pygame.draw.circle(glow, (muzzle_col[0], muzzle_col[1], muzzle_col[2], 80), (5, 5), 5)
+        surface.blit(glow, (bex - 5, bey - 5))
+        pygame.draw.circle(surface, muzzle_col, (bex, bey), 3)
+
+        # Stock
+        stock_len = half + 4
+        stx = gun_ox - int(ca * stock_len)
+        sty = gun_oy - int(sa * stock_len)
+        pygame.draw.line(surface, (35, 22, 15), (gun_ox, gun_oy), (stx, sty), 5)
+        pygame.draw.line(surface, (55, 38, 25), (gun_ox, gun_oy), (stx, sty), 3)
+
+        # --- Body: obsidian armor with magma cracks ---
+        if self.detected:
+            body_col = (200, 80, 30)
+            body_out = (160, 50, 20)
+        else:
+            body_col = (65, 40, 30)
+            body_out = (45, 28, 18)
+
+        body = pygame.Rect(gx - half, gy - half, self.size, self.size)
+        pygame.draw.rect(surface, body_col, body, border_radius=6)
+        pygame.draw.rect(surface, body_out, body, width=2, border_radius=6)
+
+        # Magma crack lines on armor
+        crack_surf = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
+        if self.detected:
+            crack_col = (255, 200, 80, 100)
+        else:
+            crack_col = (200, 90, 20, 70)
+        pygame.draw.line(crack_surf, crack_col,
+                         (half, 3), (half + 3, self.size - 3), 1)
+        pygame.draw.line(crack_surf, crack_col,
+                         (3, half), (self.size - 5, half + 2), 1)
+        surface.blit(crack_surf, (gx - half, gy - half))
+
+        # Power indicator (ember glow)
+        indicator = (255, 160, 40) if not self.detected else (255, 60, 30)
+        pygame.draw.circle(surface, indicator, (gx - 4, gy - 4), 2)
+        ind_glow = pygame.Surface((8, 8), pygame.SRCALPHA)
+        pygame.draw.circle(ind_glow, (indicator[0], indicator[1], indicator[2], 45), (4, 4), 4)
+        surface.blit(ind_glow, (gx - 8, gy - 8))
+
+        # --- Helmet: volcanic with fiery visor ---
+        head_x = gx + int(ca * 2)
+        head_y = gy + int(sa * 2)
+        helmet_col = tuple(max(0, c - 10) for c in body_col)
+        pygame.draw.circle(surface, helmet_col, (head_x, head_y), 9)
+        pygame.draw.circle(surface, body_out, (head_x, head_y), 9, 1)
+
+        # Visor (glowing slit — fiery)
+        visor_len = 5
+        v1x = head_x + int(perp_x * visor_len) + int(ca * 3)
+        v1y = head_y + int(perp_y * visor_len) + int(sa * 3)
+        v2x = head_x - int(perp_x * visor_len) + int(ca * 3)
+        v2y = head_y - int(perp_y * visor_len) + int(sa * 3)
+        visor_col = (255, 140, 30) if not self.detected else (255, 60, 30)
+        pygame.draw.line(surface, visor_col, (v1x, v1y), (v2x, v2y), 3)
+        vg = pygame.Surface((14, 14), pygame.SRCALPHA)
+        pygame.draw.circle(vg, (visor_col[0], visor_col[1], visor_col[2], 35), (7, 7), 7)
+        surface.blit(vg, (head_x + int(ca * 3) - 7, head_y + int(sa * 3) - 7))
