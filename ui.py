@@ -15,60 +15,169 @@ from settings import (
 class UI:
     def __init__(self):
         try:
+            self.font_title = pygame.font.SysFont("consolas", 58, bold=True)
             self.font_large = pygame.font.SysFont("consolas", 52, bold=True)
             self.font_medium = pygame.font.SysFont("consolas", 28)
             self.font_small = pygame.font.SysFont("consolas", 18)
             self.font_tiny = pygame.font.SysFont("consolas", 14)
+            self.font_cta = pygame.font.SysFont("consolas", 30, bold=True)
+            self.font_controls = pygame.font.SysFont("consolas", 16)
         except Exception:
+            self.font_title = pygame.font.Font(None, 58)
             self.font_large = pygame.font.Font(None, 52)
             self.font_medium = pygame.font.Font(None, 28)
             self.font_small = pygame.font.Font(None, 18)
             self.font_tiny = pygame.font.Font(None, 14)
+            self.font_cta = pygame.font.Font(None, 30)
+            self.font_controls = pygame.font.Font(None, 16)
         self.anim_timer = 0
 
     def update(self):
         self.anim_timer += 1
 
+    # ──────────────────────────────────────────────────────────────
+    #   MAIN MENU
+    # ──────────────────────────────────────────────────────────────
     def draw_menu(self, surface):
-        surface.fill(DARK_GRAY)
-        self._draw_particles(surface)
-        title_y = SCREEN_HEIGHT // 2 - 130
-        pulse = math.sin(self.anim_timer * 0.05) * 5
-        sh = self.font_large.render("HUNTER ASSASSIN", True, (60, 15, 15))
-        surface.blit(sh, sh.get_rect(center=(SCREEN_WIDTH//2+3, title_y+3+pulse)))
-        t = self.font_large.render("HUNTER ASSASSIN", True, TITLE_COLOR)
-        surface.blit(t, t.get_rect(center=(SCREEN_WIDTH//2, title_y+pulse)))
-        sub = self.font_small.render("A Stealth Elimination Game", True, LIGHT_GRAY)
-        surface.blit(sub, sub.get_rect(center=(SCREEN_WIDTH//2, title_y+55)))
-        lines = [
-            "WASD / Arrow Keys  —  Move", "",
-            "Sneak BEHIND enemies to eliminate them",
-            "Stay OUT of their vision cone!",
-            "Eliminate ALL guards to clear the level",
-        ]
-        y = SCREEN_HEIGHT // 2 + 5
-        for i, line in enumerate(lines):
-            if line:
-                txt = self.font_small.render(line, True, HUD_TEXT)
-                surface.blit(txt, txt.get_rect(center=(SCREEN_WIDTH//2, y + i*26)))
-        if (self.anim_timer // 40) % 2 == 0:
-            st = self.font_medium.render("Press ENTER to Start", True, HUD_ACCENT)
-            surface.blit(st, st.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT-80)))
-        cr = self.font_tiny.render("Made with Python + Pygame", True, (70, 70, 80))
-        surface.blit(cr, cr.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT-30)))
+        surface.fill((12, 12, 18))
 
+        # --- Subtle scanline overlay ---
+        self._draw_scanlines(surface)
+
+        # --- Ambient particles (refined) ---
+        self._draw_particles(surface)
+
+        # --- Outer frame border ---
+        self._draw_frame_border(surface)
+
+        # --- Decorative top line accent ---
+        accent_y = 60
+        line_w = 260
+        cx = SCREEN_WIDTH // 2
+        pygame.draw.line(surface, (60, 60, 80), (cx - line_w, accent_y), (cx + line_w, accent_y), 1)
+        # Small diamond in the center of the top line
+        diamond_pts = [(cx, accent_y - 5), (cx + 5, accent_y), (cx, accent_y + 5), (cx - 5, accent_y)]
+        pygame.draw.polygon(surface, (80, 80, 110), diamond_pts, 1)
+
+        # --- Title section ---
+        title_y = 120
+        pulse = math.sin(self.anim_timer * 0.04) * 3
+
+        # Glow layers (soft bloom behind the text)
+        for i in range(3):
+            glow_alpha = 18 - i * 5
+            glow_col = (255, 70, 70)
+            glow_surf = self.font_title.render("HUNTER ASSASSIN", True, glow_col)
+            glow_overlay = pygame.Surface(glow_surf.get_size(), pygame.SRCALPHA)
+            glow_overlay.blit(glow_surf, (0, 0))
+            glow_overlay.set_alpha(glow_alpha)
+            offset = (i + 1) * 2
+            surface.blit(glow_overlay, glow_overlay.get_rect(
+                center=(cx + offset, title_y + pulse + offset)))
+
+        # Shadow
+        sh = self.font_title.render("HUNTER ASSASSIN", True, (40, 10, 10))
+        surface.blit(sh, sh.get_rect(center=(cx + 2, title_y + 2 + pulse)))
+
+        # Main title
+        t = self.font_title.render("HUNTER ASSASSIN", True, TITLE_COLOR)
+        surface.blit(t, t.get_rect(center=(cx, title_y + pulse)))
+
+        # Subtitle with refined style
+        sub_y = title_y + 55
+        sub = self.font_small.render("A  S T E A L T H  E L I M I N A T I O N  G A M E", True, (120, 120, 140))
+        surface.blit(sub, sub.get_rect(center=(cx, sub_y)))
+
+        # --- Decorative divider below subtitle ---
+        div_y = sub_y + 28
+        pygame.draw.line(surface, (45, 45, 60), (cx - 180, div_y), (cx - 20, div_y), 1)
+        pygame.draw.line(surface, (45, 45, 60), (cx + 20, div_y), (cx + 180, div_y), 1)
+        # Small crosshair icon in the gap
+        self._draw_crosshair(surface, cx, div_y, 8, (70, 70, 90))
+
+        # --- Instructions panel ---
+        panel_y = div_y + 30
+        panel_w = 380
+        panel_h = 170
+        panel_x = cx - panel_w // 2
+
+        # Panel background with subtle border
+        panel_surf = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+        pygame.draw.rect(panel_surf, (20, 20, 30, 140), (0, 0, panel_w, panel_h), border_radius=6)
+        pygame.draw.rect(panel_surf, (50, 50, 65, 100), (0, 0, panel_w, panel_h), width=1, border_radius=6)
+        surface.blit(panel_surf, (panel_x, panel_y))
+
+        # Panel header
+        hdr = self.font_controls.render("—  HOW  TO  PLAY  —", True, (100, 100, 120))
+        surface.blit(hdr, hdr.get_rect(center=(cx, panel_y + 20)))
+
+        # Control instructions
+        instructions = [
+            ("WASD / Arrow Keys", "Move"),
+            ("Sneak BEHIND", "Eliminate enemies"),
+            ("Stay OUT", "of their vision cone"),
+            ("Eliminate ALL", "guards to clear"),
+        ]
+        instr_y = panel_y + 48
+        for i, (key_text, desc_text) in enumerate(instructions):
+            y = instr_y + i * 28
+            # Key part (highlighted)
+            kt = self.font_controls.render(key_text, True, HUD_ACCENT)
+            # Description part (dimmer)
+            dt = self.font_controls.render(f"  —  {desc_text}", True, (140, 140, 155))
+            total_w = kt.get_width() + dt.get_width()
+            start_x = cx - total_w // 2
+            surface.blit(kt, (start_x, y))
+            surface.blit(dt, (start_x + kt.get_width(), y))
+
+        # --- Bottom divider ---
+        bot_div_y = panel_y + panel_h + 25
+        pygame.draw.line(surface, (40, 40, 55), (cx - 140, bot_div_y), (cx + 140, bot_div_y), 1)
+
+        # --- CTA: "Press ENTER to Start" with smooth fade pulse ---
+        cta_y = bot_div_y + 40
+        # Smooth sinusoidal alpha pulse (never fully invisible)
+        alpha = int(140 + 115 * math.sin(self.anim_timer * 0.06))
+        alpha = max(40, min(255, alpha))
+
+        cta_text = self.font_cta.render("Press ENTER to Start", True, HUD_ACCENT)
+        cta_overlay = pygame.Surface(cta_text.get_size(), pygame.SRCALPHA)
+        cta_overlay.blit(cta_text, (0, 0))
+        cta_overlay.set_alpha(alpha)
+        surface.blit(cta_overlay, cta_text.get_rect(center=(cx, cta_y)))
+
+        # Subtle underline for CTA
+        underline_alpha = max(20, alpha // 3)
+        ul_surf = pygame.Surface((cta_text.get_width() + 20, 1), pygame.SRCALPHA)
+        ul_surf.fill((100, 200, 255, underline_alpha))
+        surface.blit(ul_surf, (cx - cta_text.get_width() // 2 - 10, cta_y + 22))
+
+        # --- Footer ---
+        cr = self.font_tiny.render("Made with Python + Pygame", True, (50, 50, 60))
+        surface.blit(cr, cr.get_rect(center=(cx, SCREEN_HEIGHT - 28)))
+
+        # Version / flavor text
+        ver = self.font_tiny.render("v1.0", True, (40, 40, 50))
+        surface.blit(ver, (SCREEN_WIDTH - 50, SCREEN_HEIGHT - 28))
+
+    # ──────────────────────────────────────────────────────────────
+    #   MAP SELECTION SCREEN
+    # ──────────────────────────────────────────────────────────────
     def draw_map_select(self, surface, selected_idx):
         """Draw the map/theme selection screen."""
         surface.fill(DARK_GRAY)
+        self._draw_scanlines(surface)
         self._draw_particles(surface)
+        self._draw_frame_border(surface)
 
+        cx = SCREEN_WIDTH // 2
         title_y = 100
         pulse = math.sin(self.anim_timer * 0.05) * 3
         t = self.font_large.render("SELECT MAP", True, TITLE_COLOR)
-        surface.blit(t, t.get_rect(center=(SCREEN_WIDTH//2, title_y + pulse)))
+        surface.blit(t, t.get_rect(center=(cx, title_y + pulse)))
 
         sub = self.font_small.render("Use LEFT / RIGHT arrows to select, ENTER to confirm", True, LIGHT_GRAY)
-        surface.blit(sub, sub.get_rect(center=(SCREEN_WIDTH//2, title_y + 55)))
+        surface.blit(sub, sub.get_rect(center=(cx, title_y + 55)))
 
         # Draw map options as cards
         card_w = 260
@@ -78,7 +187,7 @@ class UI:
         card_y = SCREEN_HEIGHT // 2 - 40
 
         for i, pack in enumerate(MAP_PACKS):
-            cx = start_x + i * (card_w + 40)
+            card_x = start_x + i * (card_w + 40)
             is_selected = (i == selected_idx)
 
             # Card background
@@ -88,18 +197,18 @@ class UI:
                 glow = pygame.Surface((card_w + 8, card_h + 8), pygame.SRCALPHA)
                 pulse_alpha = int(120 + math.sin(self.anim_timer * 0.08) * 60)
                 pygame.draw.rect(glow, (100, 200, 255, pulse_alpha), (0, 0, card_w + 8, card_h + 8), border_radius=14)
-                surface.blit(glow, (cx - 4, card_y - 4))
+                surface.blit(glow, (card_x - 4, card_y - 4))
                 bg_col = (40, 50, 65, 230)
             else:
                 bg_col = (28, 28, 38, 200)
 
             pygame.draw.rect(card_surf, bg_col, (0, 0, card_w, card_h), border_radius=12)
-            surface.blit(card_surf, (cx, card_y))
+            surface.blit(card_surf, (card_x, card_y))
 
             # Map preview (mini tiles)
             theme = pack["theme"]
             preview_size = 8
-            preview_x = cx + 20
+            preview_x = card_x + 20
             preview_y = card_y + 45
             first_map = pack["levels"][0]["map"]
             for r in range(min(15, len(first_map))):
@@ -116,12 +225,12 @@ class UI:
             # Map name
             name_col = HUD_ACCENT if is_selected else LIGHT_GRAY
             name = self.font_medium.render(pack["name"], True, name_col)
-            surface.blit(name, name.get_rect(center=(cx + card_w // 2, card_y + 22)))
+            surface.blit(name, name.get_rect(center=(card_x + card_w // 2, card_y + 22)))
 
             # Level count
             lvl_text = f"{len(pack['levels'])} Levels"
             lvl = self.font_small.render(lvl_text, True, (180, 180, 190) if is_selected else (100, 100, 110))
-            surface.blit(lvl, lvl.get_rect(center=(cx + card_w // 2, card_y + card_h - 18)))
+            surface.blit(lvl, lvl.get_rect(center=(card_x + card_w // 2, card_y + card_h - 18)))
 
         # Arrows
         arrow_y = card_y + card_h // 2
@@ -136,6 +245,9 @@ class UI:
         back = self.font_small.render("Press ESC to go back", True, (80, 80, 90))
         surface.blit(back, back.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT - 40)))
 
+    # ──────────────────────────────────────────────────────────────
+    #   HUD
+    # ──────────────────────────────────────────────────────────────
     def draw_hud(self, surface, level, enemies_left, elapsed_time):
         panel = pygame.Surface((140, 24), pygame.SRCALPHA)
         pygame.draw.rect(panel, (20, 20, 28, 180), (0, 0, 140, 24), border_radius=4)
@@ -154,6 +266,9 @@ class UI:
         tt = self.font_small.render(f"TIME: {m:02d}:{s:02d}", True, HUD_ACCENT)
         surface.blit(tt, tt.get_rect(center=(SCREEN_WIDTH//2, 22)))
 
+    # ──────────────────────────────────────────────────────────────
+    #   GAME OVER
+    # ──────────────────────────────────────────────────────────────
     def draw_game_over(self, surface, elapsed_time):
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 190))
@@ -172,6 +287,9 @@ class UI:
         q = self.font_small.render("Press ESC to Quit", True, (100, 100, 110))
         surface.blit(q, q.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT-40)))
 
+    # ──────────────────────────────────────────────────────────────
+    #   LEVEL CLEAR
+    # ──────────────────────────────────────────────────────────────
     def draw_level_clear(self, surface, level, elapsed_time):
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 15, 0, 180))
@@ -188,6 +306,9 @@ class UI:
             r = self.font_medium.render("Press ENTER for Next Level", True, HUD_ACCENT)
             surface.blit(r, r.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 110)))
 
+    # ──────────────────────────────────────────────────────────────
+    #   WIN SCREEN
+    # ──────────────────────────────────────────────────────────────
     def draw_win(self, surface, elapsed_time, total_levels):
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 20, 0, 190))
@@ -206,11 +327,72 @@ class UI:
         q = self.font_small.render("Press ESC to Quit", True, (100, 100, 110))
         surface.blit(q, q.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT-40)))
 
+    # ──────────────────────────────────────────────────────────────
+    #   HELPER: Particles
+    # ──────────────────────────────────────────────────────────────
     def _draw_particles(self, surface):
-        for i in range(15):
-            x = (i * 137 + self.anim_timer * (0.2 + i * 0.05)) % SCREEN_WIDTH
-            y = (i * 97 + self.anim_timer * (0.3 + i * 0.03)) % SCREEN_HEIGHT
-            sz = 2 + (i % 3)
+        for i in range(20):
+            x = (i * 137 + self.anim_timer * (0.15 + i * 0.03)) % SCREEN_WIDTH
+            y = (i * 97 + self.anim_timer * (0.2 + i * 0.02)) % SCREEN_HEIGHT
+            sz = 1 + (i % 3)
+            alpha = 15 + (i * 5) % 30
             ps = pygame.Surface((sz * 2, sz * 2), pygame.SRCALPHA)
-            pygame.draw.circle(ps, (180, 50, 50, 30 + (i*7)%40), (sz, sz), sz)
+            # Subtle cool-toned particles instead of bright red
+            r_col = 80 + (i * 13) % 40
+            g_col = 80 + (i * 7) % 30
+            b_col = 100 + (i * 11) % 50
+            pygame.draw.circle(ps, (r_col, g_col, b_col, alpha), (sz, sz), sz)
             surface.blit(ps, (int(x), int(y)))
+
+    # ──────────────────────────────────────────────────────────────
+    #   HELPER: Scanlines
+    # ──────────────────────────────────────────────────────────────
+    def _draw_scanlines(self, surface):
+        """Draw subtle horizontal scanlines for a tactical CRT feel."""
+        scanline_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        for y in range(0, SCREEN_HEIGHT, 4):
+            pygame.draw.line(scanline_surf, (0, 0, 0, 12), (0, y), (SCREEN_WIDTH, y), 1)
+        surface.blit(scanline_surf, (0, 0))
+
+    # ──────────────────────────────────────────────────────────────
+    #   HELPER: Frame border
+    # ──────────────────────────────────────────────────────────────
+    def _draw_frame_border(self, surface):
+        """Draw a thin elegant border frame around the screen."""
+        margin = 12
+        w = SCREEN_WIDTH - margin * 2
+        h = SCREEN_HEIGHT - margin * 2
+        # Outer line
+        border_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        pygame.draw.rect(border_surf, (50, 50, 65, 60), (margin, margin, w, h), width=1, border_radius=2)
+        # Corner accents (small L-shapes)
+        corner_len = 20
+        col = (70, 70, 90, 90)
+        # Top-left
+        pygame.draw.line(border_surf, col, (margin, margin), (margin + corner_len, margin), 2)
+        pygame.draw.line(border_surf, col, (margin, margin), (margin, margin + corner_len), 2)
+        # Top-right
+        pygame.draw.line(border_surf, col, (margin + w, margin), (margin + w - corner_len, margin), 2)
+        pygame.draw.line(border_surf, col, (margin + w, margin), (margin + w, margin + corner_len), 2)
+        # Bottom-left
+        pygame.draw.line(border_surf, col, (margin, margin + h), (margin + corner_len, margin + h), 2)
+        pygame.draw.line(border_surf, col, (margin, margin + h), (margin, margin + h - corner_len), 2)
+        # Bottom-right
+        pygame.draw.line(border_surf, col, (margin + w, margin + h), (margin + w - corner_len, margin + h), 2)
+        pygame.draw.line(border_surf, col, (margin + w, margin + h), (margin + w, margin + h - corner_len), 2)
+        surface.blit(border_surf, (0, 0))
+
+    # ──────────────────────────────────────────────────────────────
+    #   HELPER: Crosshair icon
+    # ──────────────────────────────────────────────────────────────
+    def _draw_crosshair(self, surface, x, y, size, color):
+        """Draw a small crosshair/target icon."""
+        s = size
+        # Horizontal line
+        pygame.draw.line(surface, color, (x - s, y), (x - s // 3, y), 1)
+        pygame.draw.line(surface, color, (x + s // 3, y), (x + s, y), 1)
+        # Vertical line
+        pygame.draw.line(surface, color, (x, y - s), (x, y - s // 3), 1)
+        pygame.draw.line(surface, color, (x, y + s // 3), (x, y + s), 1)
+        # Center dot
+        pygame.draw.circle(surface, color, (x, y), 1)
