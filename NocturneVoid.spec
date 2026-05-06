@@ -5,7 +5,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('nether_portal.mp3', '.'), ('among us final clip.mp3', '.'), ('WhatsApp Audio 2026-05-06 at 8.59.11 PM.mpeg', '.')],
+    datas=[('nether_portal.mp3', '.'), ('among us final clip.mp3', '.'), ('WhatsApp Audio 2026-05-06 at 8.59.11 PM.mpeg', '.'), ('icon.ico', '.'), ('assets/logo.png', 'assets')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
